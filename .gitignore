@@ -205,3 +205,6 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# FideliPyme - QR generados (no rastrear archivos generados)
+static/qr_codes/*.png
