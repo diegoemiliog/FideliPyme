@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% set active = 'clientes' %}
+{% block title %}Clientes{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Clientes</h1>
+    <p>Lista de todos los clientes registrados</p>
+</div>
+
+<div class="card">
+    <div class="search-bar">
+        <input type="search" id="searchInput" placeholder="Buscar por nombre o telefono..."
+               oninput="debounceBuscar()">
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Nombre</th>
+                    <th>Telefono</th>
+                    <th>Puntos</th>
+                    <th>Nivel</th>
+                    <th>Registro</th>
+                </tr>
+            </thead>
+            <tbody id="clientesBody">
+                <tr><td colspan="5" style="text-align:center; padding:32px"><div class="spinner"></div></td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let debounceTimer;
+
+function debounceBuscar() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(cargarClientes, 300);
+}
+
+function cargarClientes() {
+    const q = document.getElementById('searchInput').value.trim();
+    const url = '/dashboard/api/clientes' + (q ? '?q=' + encodeURIComponent(q) : '');
+
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('clientesBody');
+            if (data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="empty-state">
+                    <div class="icon">&#128269;</div>
+                    <p>No se encontraron clientes</p>
+                </td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = data.map(c => {
+                const badgeClass = 'badge-' + c.nivel.toLowerCase();
+                const tel = c.telefono.replace('whatsapp:', '');
+                return `<tr>
+                    <td><strong>${c.nombre}</strong></td>
+                    <td style="color: var(--text-secondary)">${tel}</td>
+                    <td>${c.puntos}</td>
+                    <td><span class="badge-nivel ${badgeClass}">${c.nivel}</span></td>
+                    <td style="color: var(--text-secondary)">${c.fecha_registro}</td>
+                </tr>`;
+            }).join('');
+        })
+        .catch(err => {
+            showToast('Error al cargar clientes', 'error');
+        });
+}
+
+document.addEventListener('DOMContentLoaded', cargarClientes);
+</script>
+{% endblock %}

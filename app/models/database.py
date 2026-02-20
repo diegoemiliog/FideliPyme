@@ -60,6 +60,14 @@ class _QueryBuilder:
         self._params.append((column, f"neq.{value}"))
         return self
 
+    def ilike(self, column: str, pattern: str):
+        self._params.append((column, f"ilike.{pattern}"))
+        return self
+
+    def gte(self, column: str, value):
+        self._params.append((column, f"gte.{value}"))
+        return self
+
     def order(self, column: str, desc: bool = False):
         direction = "desc" if desc else "asc"
         self._params.append(('order', f"{column}.{direction}"))
