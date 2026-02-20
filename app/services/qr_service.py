@@ -1,7 +1,8 @@
 """
 Servicio de generación de códigos QR.
-Genera un QR único por cliente con su información.
+Genera QR en formato texto ASCII (sin dependencia de Pillow).
 """
+import io
 import os
 import qrcode
 from app.models.database import obtener_supabase
@@ -9,14 +10,13 @@ from app.models.database import obtener_supabase
 
 def generar_qr_cliente(cliente_id: str, telefono: str) -> str:
     """
-    Genera un código QR único para el cliente.
-    El QR contiene el ID del cliente y su teléfono.
-    Retorna la ruta del archivo QR generado.
+    Genera un código QR en texto ASCII para el cliente.
+    Guarda el resultado como archivo .txt.
+    Retorna la ruta del archivo generado.
     """
-    # Directorio para guardar los QR
     directorio_qr = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-        'static', 'qr_codes'
+        'static', 'qr_codes',
     )
     os.makedirs(directorio_qr, exist_ok=True)
 
@@ -27,23 +27,27 @@ def generar_qr_cliente(cliente_id: str, telefono: str) -> str:
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_L,
-        box_size=10,
-        border=4,
+        box_size=1,
+        border=2,
     )
     qr.add_data(datos_qr)
     qr.make(fit=True)
 
-    imagen = qr.make_image(fill_color="black", back_color="white")
+    # Capturar la salida ASCII en un string
+    buffer = io.StringIO()
+    qr.print_ascii(out=buffer)
+    contenido_ascii = buffer.getvalue()
 
-    # Guardar archivo
-    nombre_archivo = f"qr_{cliente_id}.png"
+    # Guardar como archivo de texto
+    nombre_archivo = f"qr_{cliente_id}.txt"
     ruta_archivo = os.path.join(directorio_qr, nombre_archivo)
-    imagen.save(ruta_archivo)
+    with open(ruta_archivo, 'w') as f:
+        f.write(contenido_ascii)
 
     # Guardar referencia en la base de datos
     db = obtener_supabase()
     db.table('clientes').update({
-        'codigo_qr': nombre_archivo
+        'codigo_qr': nombre_archivo,
     }).eq('id', cliente_id).execute()
 
     return ruta_archivo
@@ -53,9 +57,9 @@ def obtener_ruta_qr(cliente_id: str) -> str | None:
     """Obtiene la ruta del QR de un cliente, generándolo si no existe."""
     directorio_qr = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-        'static', 'qr_codes'
+        'static', 'qr_codes',
     )
-    ruta = os.path.join(directorio_qr, f"qr_{cliente_id}.png")
+    ruta = os.path.join(directorio_qr, f"qr_{cliente_id}.txt")
 
     if os.path.exists(ruta):
         return ruta

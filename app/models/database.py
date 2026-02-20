@@ -1,14 +1,14 @@
 """
-Módulo de conexión a Supabase via REST API.
-Usa requests en lugar de la librería supabase-py para compatibilidad con Python 3.14.
-Proporciona un cliente singleton con interfaz fluida compatible.
+Cliente REST ligero para Supabase (PostgREST).
+Usa requests en lugar de supabase-py para compatibilidad con Python 3.14+.
+Interfaz fluida: db.table('x').select('*').eq('col', val).execute()
 """
 import requests as _requests
 from app.config import SUPABASE_URL, SUPABASE_KEY
 
 
 class _Response:
-    """Respuesta que imita la interfaz de supabase-py."""
+    """Envuelve la respuesta JSON en un objeto con atributo .data."""
     __slots__ = ('data',)
 
     def __init__(self, data: list):
@@ -16,7 +16,10 @@ class _Response:
 
 
 class _QueryBuilder:
-    """Constructor de queries con interfaz fluida compatible con supabase-py."""
+    """
+    Constructor de queries con interfaz fluida.
+    Soporta: select, insert, update, delete, eq, neq, ilike, gte, order, limit.
+    """
 
     def __init__(self, base_url: str, headers: dict, table_name: str):
         self._url = f"{base_url}/rest/v1/{table_name}"
@@ -25,76 +28,93 @@ class _QueryBuilder:
         self._operation: str | None = None
         self._body = None
 
-    # --- Operaciones ---
+    # ── Operaciones ──
 
     def select(self, columns: str = '*'):
+        """Define una operación SELECT (GET)."""
         self._operation = 'select'
         self._params.append(('select', columns))
         return self
 
     def insert(self, data):
+        """Define una operación INSERT (POST). data puede ser dict o list."""
         self._operation = 'insert'
         self._body = data
         return self
 
     def update(self, data: dict):
+        """Define una operación UPDATE (PATCH)."""
         self._operation = 'update'
         self._body = data
         return self
 
     def delete(self):
+        """Define una operación DELETE."""
         self._operation = 'delete'
         return self
 
-    # --- Filtros ---
+    # ── Filtros ──
 
     def eq(self, column: str, value):
+        """Filtro: columna igual a valor."""
         if isinstance(value, bool):
             value = str(value).lower()
         self._params.append((column, f"eq.{value}"))
         return self
 
     def neq(self, column: str, value):
+        """Filtro: columna distinta de valor."""
         if isinstance(value, bool):
             value = str(value).lower()
         self._params.append((column, f"neq.{value}"))
         return self
 
     def ilike(self, column: str, pattern: str):
+        """Filtro: búsqueda insensible a mayúsculas (ILIKE)."""
         self._params.append((column, f"ilike.{pattern}"))
         return self
 
     def gte(self, column: str, value):
+        """Filtro: columna mayor o igual a valor."""
         self._params.append((column, f"gte.{value}"))
         return self
 
+    # ── Modificadores ──
+
     def order(self, column: str, desc: bool = False):
+        """Ordena los resultados por columna."""
         direction = "desc" if desc else "asc"
         self._params.append(('order', f"{column}.{direction}"))
         return self
 
     def limit(self, count: int):
+        """Limita la cantidad de resultados."""
         self._params.append(('limit', str(count)))
         return self
 
-    # --- Ejecución ---
+    # ── Ejecución ──
 
     def execute(self) -> _Response:
+        """Ejecuta la query contra la API REST de Supabase."""
         headers = self._headers
 
         if self._operation == 'select':
-            resp = _requests.get(self._url, headers=headers, params=self._params)
+            resp = _requests.get(
+                self._url, headers=headers, params=self._params,
+            )
 
         elif self._operation == 'insert':
             headers['Prefer'] = 'return=representation'
             resp = _requests.post(
-                self._url, headers=headers, json=self._body, params=self._params,
+                self._url, headers=headers, json=self._body,
+                params=self._params,
             )
 
         elif self._operation == 'update':
             headers['Prefer'] = 'return=representation'
             resp = _requests.patch(
-                self._url, headers=headers, json=self._body, params=self._params,
+                self._url, headers=headers, json=self._body,
+                params=self._params,
             )
 
         elif self._operation == 'delete':
@@ -102,8 +122,12 @@ class _QueryBuilder:
             resp = _requests.delete(
                 self._url, headers=headers, params=self._params,
             )
+
         else:
-            raise ValueError(f"Operación no definida: llama select/insert/update/delete antes de execute")
+            raise ValueError(
+                "Operación no definida: llama select/insert/update/delete "
+                "antes de execute"
+            )
 
         resp.raise_for_status()
         return _Response(resp.json())
@@ -121,15 +145,16 @@ class SupabaseREST:
         }
 
     def table(self, table_name: str) -> _QueryBuilder:
+        """Retorna un QueryBuilder para la tabla indicada."""
         return _QueryBuilder(self._url, self._headers, table_name)
 
 
-# --- Singleton ---
+# ── Singleton ──
 _cliente_supabase: SupabaseREST | None = None
 
 
 def obtener_supabase() -> SupabaseREST:
-    """Obtiene la instancia del cliente de Supabase (singleton)."""
+    """Obtiene la instancia singleton del cliente de Supabase."""
     global _cliente_supabase
     if _cliente_supabase is None:
         if not SUPABASE_URL or not SUPABASE_KEY:

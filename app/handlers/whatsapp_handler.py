@@ -1,6 +1,8 @@
 """
 Handler principal de mensajes de WhatsApp.
 Gestiona el flujo conversacional: registro, menú, consultas y canjes.
+Acepta tanto números (1-6) como palabras clave.
+Nunca se queda sin responder — siempre retorna texto válido.
 """
 from app.services.cliente_service import (
     buscar_cliente_por_telefono,
@@ -26,7 +28,7 @@ _estados_conversacion = {}
 # Palabras clave reconocidas como comandos (no son nombres de persona)
 _COMANDOS = {
     '1', '2', '3', '4', '5', '6',
-    'puntos', 'saldo', 'ver puntos',
+    'puntos', 'saldo', 'ver puntos', 'mis puntos',
     'premios', 'catalogo', 'catálogo', 'ver premios',
     'canjear', 'canje', 'canjes',
     'historial', 'mi historial', 'movimientos',
@@ -117,7 +119,6 @@ def _procesar_mensaje_interno(telefono: str, mensaje: str) -> str:
 
     if not cliente:
         # Cliente nuevo: iniciar flujo de registro
-        # Si ya mandó "hola" o un comando, mostrar bienvenida
         _estados_conversacion[telefono] = {'estado': 'esperando_nombre'}
         return _mensaje_bienvenida()
 
@@ -226,7 +227,11 @@ def _procesar_canje_seleccion(telefono: str, mensaje: str, mensaje_lower: str) -
 
 
 def _procesar_opcion(telefono: str, mensaje_lower: str, cliente: dict) -> str:
-    """Procesa la opción seleccionada del menú."""
+    """
+    Procesa la opción seleccionada del menú.
+    Acepta números (1-6) y palabras clave.
+    Siempre retorna una respuesta — nunca se queda sin responder.
+    """
 
     # Opción 1: Ver puntos
     if mensaje_lower in ('1', 'puntos', 'saldo', 'ver puntos', 'mis puntos'):
@@ -270,7 +275,7 @@ def _procesar_opcion(telefono: str, mensaje_lower: str, cliente: dict) -> str:
     if mensaje_lower in ('menu', 'menú', 'inicio', 'hola', 'hi', 'hello'):
         return f"¡Hola, *{cliente['nombre']}*! 👋\n\n" + obtener_menu()
 
-    # Cualquier mensaje no reconocido → siempre responder con menú
+    # Cualquier mensaje no reconocido → SIEMPRE responder con menú
     return (
         f"No entendí tu mensaje, *{cliente['nombre']}*. 🤔\n\n"
         + obtener_menu()
