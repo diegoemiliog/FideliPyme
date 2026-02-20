@@ -15,4 +15,7 @@ def crear_app():
     from app.routes.webhook import webhook_bp
     app.register_blueprint(webhook_bp)
 
+    from app.routes.dashboard import dashboard_bp
+    app.register_blueprint(dashboard_bp)
+
     return app

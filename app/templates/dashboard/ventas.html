@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% set active = 'ventas' %}
+{% block title %}Registrar Venta{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Registrar Venta</h1>
+    <p>Busca al cliente y registra su compra para sumar puntos</p>
+</div>
+
+<div class="ventas-layout">
+    <!-- Search & Form -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Datos de la venta</h3>
+        </div>
+
+        <!-- Step 1: Search client -->
+        <div class="form-group">
+            <label for="telefono">Telefono del cliente</label>
+            <div class="search-bar" style="margin-bottom: 0;">
+                <input type="text" id="telefono" placeholder="Ej: +521234567890 o whatsapp:+521234567890">
+                <button class="btn btn-primary" onclick="buscarCliente()" id="btnBuscar">Buscar</button>
+            </div>
+        </div>
+
+        <!-- Client preview -->
+        <div class="cliente-preview" id="clientePreview">
+            <div class="nombre" id="prevNombre"></div>
+            <div class="detail"><span>Telefono</span> <strong id="prevTel"></strong></div>
+            <div class="detail"><span>Puntos actuales</span> <strong id="prevPuntos"></strong></div>
+            <div class="detail"><span>Nivel</span> <strong id="prevNivel"></strong></div>
+            <div class="detail"><span>Multiplicador</span> <strong id="prevMult"></strong></div>
+        </div>
+
+        <!-- Step 2: Amount -->
+        <div id="montoSection" style="display: none; margin-top: 20px;">
+            <div class="form-group">
+                <label for="monto">Monto de la compra (MXN)</label>
+                <input type="number" id="monto" placeholder="Ej: 150.00" min="1" step="0.01">
+            </div>
+            <button class="btn btn-success" onclick="registrarVenta()" id="btnRegistrar" style="width: 100%;">
+                Registrar Venta y Sumar Puntos
+            </button>
+        </div>
+    </div>
+
+    <!-- Result -->
+    <div>
+        <div class="venta-result" id="ventaResult">
+            <div class="result-icon">&#127881;</div>
+            <div>Puntos otorgados</div>
+            <div class="result-puntos" id="resPuntos"></div>
+            <div class="result-detail" id="resDetail"></div>
+            <div class="result-detail" id="resTotal"></div>
+            <div class="level-up" id="resLevelUp" style="display: none;"></div>
+            <button class="btn btn-primary" style="margin-top: 20px;" onclick="resetVenta()">
+                Nueva Venta
+            </button>
+        </div>
+
+        <div class="card" id="ventaHelp">
+            <div class="card-header"><h3>Como funciona</h3></div>
+            <p style="color: var(--text-secondary); font-size: 14px; line-height: 1.8;">
+                <strong>1.</strong> Busca al cliente por su numero de telefono.<br>
+                <strong>2.</strong> Ingresa el monto de la compra en MXN.<br>
+                <strong>3.</strong> Los puntos se calculan automaticamente:<br>
+                &nbsp;&nbsp;&nbsp;&nbsp;Cada <strong>$10 MXN = 1 punto base</strong><br>
+                &nbsp;&nbsp;&nbsp;&nbsp;Se multiplican segun el nivel del cliente.<br><br>
+                <strong>Multiplicadores por nivel:</strong><br>
+                &#129353; Bronce: x1.0<br>
+                &#129352; Plata: x1.25<br>
+                &#129351; Oro: x1.5<br>
+                &#128081; Platino: x2.0
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let clienteActual = null;
+
+function buscarCliente() {
+    const tel = document.getElementById('telefono').value.trim();
+    if (!tel) return showToast('Ingresa un telefono', 'error');
+
+    const btn = document.getElementById('btnBuscar');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+
+    fetch('/dashboard/api/buscar-cliente?telefono=' + encodeURIComponent(tel))
+        .then(r => {
+            if (!r.ok) throw r;
+            return r.json();
+        })
+        .then(data => {
+            clienteActual = data;
+            document.getElementById('prevNombre').textContent = data.nombre;
+            document.getElementById('prevTel').textContent = data.telefono;
+            document.getElementById('prevPuntos').textContent = data.puntos + ' pts';
+            document.getElementById('prevNivel').textContent = data.nivel;
+            document.getElementById('prevMult').textContent = 'x' + data.multiplicador;
+            document.getElementById('clientePreview').classList.add('visible');
+            document.getElementById('montoSection').style.display = 'block';
+            document.getElementById('monto').focus();
+        })
+        .catch(err => {
+            clienteActual = null;
+            document.getElementById('clientePreview').classList.remove('visible');
+            document.getElementById('montoSection').style.display = 'none';
+            showToast('Cliente no encontrado', 'error');
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.textContent = 'Buscar';
+        });
+}
+
+function registrarVenta() {
+    if (!clienteActual) return showToast('Busca un cliente primero', 'error');
+    const monto = parseFloat(document.getElementById('monto').value);
+    if (!monto || monto <= 0) return showToast('Ingresa un monto valido', 'error');
+
+    const btn = document.getElementById('btnRegistrar');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Procesando...';
+
+    fetch('/dashboard/api/registrar-venta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cliente_id: clienteActual.id, monto: monto })
+    })
+    .then(r => {
+        if (!r.ok) throw r;
+        return r.json();
+    })
+    .then(data => {
+        document.getElementById('resPuntos').textContent = '+' + data.puntos_otorgados;
+        document.getElementById('resDetail').textContent =
+            'Compra: $' + monto.toFixed(2) + ' MXN | Multiplicador: x' + data.multiplicador;
+        document.getElementById('resTotal').textContent =
+            'Nuevo total: ' + data.nuevo_total + ' pts | Nivel: ' + data.nivel;
+
+        const levelUp = document.getElementById('resLevelUp');
+        if (data.subio_nivel) {
+            levelUp.textContent = '\u{1F389} Subio a nivel ' + data.nivel + '!';
+            levelUp.style.display = 'block';
+        } else {
+            levelUp.style.display = 'none';
+        }
+
+        document.getElementById('ventaResult').classList.add('visible', 'success');
+        document.getElementById('ventaHelp').style.display = 'none';
+        showToast('Venta registrada exitosamente', 'success');
+    })
+    .catch(err => {
+        showToast('Error al registrar la venta', 'error');
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.textContent = 'Registrar Venta y Sumar Puntos';
+    });
+}
+
+function resetVenta() {
+    clienteActual = null;
+    document.getElementById('telefono').value = '';
+    document.getElementById('monto').value = '';
+    document.getElementById('clientePreview').classList.remove('visible');
+    document.getElementById('montoSection').style.display = 'none';
+    document.getElementById('ventaResult').classList.remove('visible', 'success');
+    document.getElementById('ventaHelp').style.display = 'block';
+    document.getElementById('telefono').focus();
+}
+
+// Enter key support
+document.getElementById('telefono').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') buscarCliente();
+});
+document.getElementById('monto').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') registrarVenta();
+});
+</script>
+{% endblock %}

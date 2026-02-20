@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% set active = 'premios' %}
+{% block title %}Premios{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Premios</h1>
+    <p>Administra el catalogo de premios canjeables</p>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3>Catalogo de premios</h3>
+        <button class="btn btn-primary btn-sm" onclick="abrirModal()">+ Nuevo Premio</button>
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Nombre</th>
+                    <th>Costo (pts)</th>
+                    <th>Descripcion</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="premiosBody">
+                <tr><td colspan="5" style="text-align:center; padding:32px"><div class="spinner"></div></td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal para crear/editar premio -->
+<div class="modal-overlay" id="premioModal">
+    <div class="modal">
+        <h3 id="modalTitle">Nuevo Premio</h3>
+        <input type="hidden" id="premioId">
+        <div class="form-group">
+            <label for="premioNombre">Nombre</label>
+            <input type="text" id="premioNombre" placeholder="Ej: Cafe Gratis">
+        </div>
+        <div class="form-group">
+            <label for="premioCosto">Costo en puntos</label>
+            <input type="number" id="premioCosto" placeholder="Ej: 50" min="1">
+        </div>
+        <div class="form-group">
+            <label for="premioDesc">Descripcion</label>
+            <textarea id="premioDesc" rows="3" placeholder="Describe el premio..."></textarea>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="cerrarModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="guardarPremio()" id="btnGuardar">Guardar</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function cargarPremios() {
+    fetch('/dashboard/api/premios')
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('premiosBody');
+            if (data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="empty-state">
+                    <div class="icon">&#127873;</div>
+                    <p>No hay premios creados</p>
+                </td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = data.map(p => {
+                const estado = p.activo
+                    ? '<span style="color: var(--success)">Activo</span>'
+                    : '<span style="color: var(--text-muted)">Inactivo</span>';
+                return `<tr>
+                    <td><strong>${p.nombre}</strong></td>
+                    <td>${p.costo_puntos}</td>
+                    <td style="color: var(--text-secondary); max-width: 200px;">${p.descripcion || '-'}</td>
+                    <td>${estado}</td>
+                    <td>
+                        <button class="btn btn-secondary btn-sm" onclick='editarPremio(${JSON.stringify(p)})'>Editar</button>
+                        ${p.activo
+                            ? `<button class="btn btn-danger btn-sm" onclick="eliminarPremio('${p.id}')">Eliminar</button>`
+                            : `<button class="btn btn-success btn-sm" onclick="reactivarPremio('${p.id}')">Activar</button>`
+                        }
+                    </td>
+                </tr>`;
+            }).join('');
+        })
+        .catch(() => showToast('Error al cargar premios', 'error'));
+}
+
+function abrirModal(premio) {
+    document.getElementById('premioId').value = premio ? premio.id : '';
+    document.getElementById('premioNombre').value = premio ? premio.nombre : '';
+    document.getElementById('premioCosto').value = premio ? premio.costo_puntos : '';
+    document.getElementById('premioDesc').value = premio ? (premio.descripcion || '') : '';
+    document.getElementById('modalTitle').textContent = premio ? 'Editar Premio' : 'Nuevo Premio';
+    document.getElementById('premioModal').classList.add('visible');
+}
+
+function cerrarModal() {
+    document.getElementById('premioModal').classList.remove('visible');
+}
+
+function editarPremio(premio) {
+    abrirModal(premio);
+}
+
+function guardarPremio() {
+    const id = document.getElementById('premioId').value;
+    const nombre = document.getElementById('premioNombre').value.trim();
+    const costo = document.getElementById('premioCosto').value;
+    const descripcion = document.getElementById('premioDesc').value.trim();
+
+    if (!nombre || !costo) return showToast('Nombre y costo son requeridos', 'error');
+
+    const btn = document.getElementById('btnGuardar');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+
+    const url = id ? `/dashboard/api/premios/${id}` : '/dashboard/api/premios';
+    const method = id ? 'PUT' : 'POST';
+
+    fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre, costo_puntos: parseInt(costo), descripcion })
+    })
+    .then(r => {
+        if (!r.ok) throw r;
+        return r.json();
+    })
+    .then(() => {
+        cerrarModal();
+        cargarPremios();
+        showToast(id ? 'Premio actualizado' : 'Premio creado', 'success');
+    })
+    .catch(() => showToast('Error al guardar el premio', 'error'))
+    .finally(() => {
+        btn.disabled = false;
+        btn.textContent = 'Guardar';
+    });
+}
+
+function eliminarPremio(id) {
+    if (!confirm('Desactivar este premio?')) return;
+
+    fetch(`/dashboard/api/premios/${id}`, { method: 'DELETE' })
+        .then(r => {
+            if (!r.ok) throw r;
+            cargarPremios();
+            showToast('Premio desactivado', 'success');
+        })
+        .catch(() => showToast('Error al eliminar', 'error'));
+}
+
+function reactivarPremio(id) {
+    fetch(`/dashboard/api/premios/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activo: true })
+    })
+    .then(r => {
+        if (!r.ok) throw r;
+        cargarPremios();
+        showToast('Premio reactivado', 'success');
+    })
+    .catch(() => showToast('Error al reactivar', 'error'));
+}
+
+// Close modal on overlay click
+document.getElementById('premioModal').addEventListener('click', function(e) {
+    if (e.target === this) cerrarModal();
+});
+
+document.addEventListener('DOMContentLoaded', cargarPremios);
+</script>
+{% endblock %}

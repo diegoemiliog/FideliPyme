@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% set active = 'index' %}
+{% block title %}Estadisticas{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Estadisticas</h1>
+    <p>Vista general del programa de lealtad</p>
+</div>
+
+<!-- Stat Cards -->
+<div class="stats-grid" id="statsGrid">
+    <div class="stat-card">
+        <div class="stat-icon">&#128101;</div>
+        <div class="stat-value" id="statClientes">-</div>
+        <div class="stat-label">Clientes registrados</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">&#11088;</div>
+        <div class="stat-value" id="statPuntos">-</div>
+        <div class="stat-label">Puntos en circulacion</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">&#127873;</div>
+        <div class="stat-value" id="statCanjes">-</div>
+        <div class="stat-label">Canjes realizados</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">&#128176;</div>
+        <div class="stat-value" id="statVentas">-</div>
+        <div class="stat-label">Ventas registradas (MXN)</div>
+    </div>
+</div>
+
+<!-- Distribution and Top clients -->
+<div class="ventas-layout">
+    <!-- Level distribution -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Distribucion por nivel</h3>
+        </div>
+        <div id="levelBars">
+            <div class="empty-state"><div class="spinner"></div></div>
+        </div>
+    </div>
+
+    <!-- Top clients -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Top 5 clientes</h3>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Nombre</th>
+                        <th>Puntos</th>
+                        <th>Nivel</th>
+                    </tr>
+                </thead>
+                <tbody id="topClientes">
+                    <tr><td colspan="4" style="text-align:center"><div class="spinner"></div></td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    fetch('/dashboard/api/estadisticas')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('statClientes').textContent = data.total_clientes;
+            document.getElementById('statPuntos').textContent = data.puntos_circulacion.toLocaleString();
+            document.getElementById('statCanjes').textContent = data.total_canjes;
+            document.getElementById('statVentas').textContent = '$' + data.total_ventas.toLocaleString();
+
+            // Level bars
+            const total = data.total_clientes || 1;
+            const niveles = data.niveles;
+            const colors = { Bronce: 'bronce', Plata: 'plata', Oro: 'oro', Platino: 'platino' };
+            const icons = { Bronce: '\u{1F949}', Plata: '\u{1F948}', Oro: '\u{1F947}', Platino: '\u{1F451}' };
+
+            let barsHTML = '';
+            for (const [nivel, count] of Object.entries(niveles)) {
+                const pct = Math.round((count / total) * 100);
+                barsHTML += `
+                    <div class="level-bar-wrap">
+                        <div class="level-bar-label">
+                            <span>${icons[nivel] || ''} ${nivel}</span>
+                            <span>${count} cliente${count !== 1 ? 's' : ''} (${pct}%)</span>
+                        </div>
+                        <div class="level-bar">
+                            <div class="level-bar-fill ${colors[nivel]}" style="width: ${pct}%"></div>
+                        </div>
+                    </div>`;
+            }
+            document.getElementById('levelBars').innerHTML = barsHTML;
+
+            // Top clients
+            let rows = '';
+            if (data.top_clientes.length === 0) {
+                rows = '<tr><td colspan="4" class="empty-state"><p>Sin clientes aun</p></td></tr>';
+            } else {
+                data.top_clientes.forEach((c, i) => {
+                    const badgeClass = 'badge-' + c.nivel.toLowerCase();
+                    rows += `<tr>
+                        <td>${i + 1}</td>
+                        <td><strong>${c.nombre}</strong></td>
+                        <td>${c.puntos}</td>
+                        <td><span class="badge-nivel ${badgeClass}">${c.nivel}</span></td>
+                    </tr>`;
+                });
+            }
+            document.getElementById('topClientes').innerHTML = rows;
+        })
+        .catch(err => {
+            console.error('Error cargando estadisticas:', err);
+            showToast('Error al cargar estadisticas', 'error');
+        });
+});
+</script>
+{% endblock %}
